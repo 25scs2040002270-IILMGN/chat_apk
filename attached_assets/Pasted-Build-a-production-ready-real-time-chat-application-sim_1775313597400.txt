@@ -1,0 +1,111 @@
+Build a production-ready real-time chat application similar to WhatsApp with the following requirements:
+‎
+‎🎯 Core Features
+‎
+‎- User authentication (Signup/Login) using JWT
+‎- One-to-one real-time messaging
+‎- Online/offline user status
+‎- Typing indicators
+‎- Message delivery & read receipts (single tick, double tick, blue tick)
+‎- Chat list with last message preview and timestamp
+‎- Media sharing (images, videos, files)
+‎- Push notifications for new messages
+‎- User profile (name, avatar)
+‎
+‎---
+‎
+‎🧱 Tech Stack
+‎
+‎- Frontend: React (with modern UI, responsive design)
+‎- Backend: Node.js + Express
+‎- Real-time: Socket.IO (WebSockets)
+‎- Database: MongoDB (with Mongoose)
+‎- Authentication: JWT + bcrypt
+‎- File Uploads: Cloudinary or AWS S3
+‎- Notifications: Firebase Cloud Messaging (FCM)
+‎
+‎---
+‎
+‎🏗️ Architecture Requirements
+‎
+‎- Follow clean architecture (separation of concerns)
+‎- Use MVC or modular structure
+‎- REST APIs for standard operations
+‎- WebSockets for real-time messaging
+‎- Environment variables for secrets
+‎- Scalable folder structure
+‎
+‎---
+‎
+‎🗂️ Backend Features
+‎
+‎- Auth routes (register, login)
+‎- User routes (profile, search users)
+‎- Chat/message routes
+‎- Socket server for real-time communication
+‎- Store messages in DB with timestamps
+‎- Maintain active users list
+‎- Handle reconnect logic
+‎
+‎---
+‎
+‎💬 Messaging Logic
+‎
+‎- Save every message to database
+‎- Emit message instantly to receiver via socket
+‎- If user offline → store and deliver later
+‎- Maintain message status (sent, delivered, read)
+‎-after reading message get deleted automatically after 8h
+‎
+‎---
+‎
+‎🎨 Frontend Features
+‎
+‎- Modern chat UI (like WhatsApp)
+‎- Sidebar with conversations
+‎- Chat window with message bubbles
+‎- Typing indicator
+‎- Scrollable chat history
+‎- File/image preview before sending
+‎- Responsive (mobile + desktop)
+‎
+‎---
+‎
+‎🔒 Security & Production Practices
+‎
+‎- Hash passwords with bcrypt
+‎- Protect routes with JWT middleware
+‎- Validate inputs
+‎- Handle errors properly
+‎- Use HTTPS-ready configuration
+‎- Rate limiting (basic)
+‎
+‎---
+‎
+‎🚀 Deployment
+‎
+‎- Prepare for deployment (Vercel for frontend, Render for backend)
+‎- Use environment configs (.env)
+‎- Optimize build
+‎
+‎---
+‎
+‎📦 Deliverables
+‎
+‎- Full working code (frontend + backend)
+‎- Clear folder structure
+‎- Setup instructions
+‎- .env example file
+‎- Sample API documentation
+‎
+‎---
+‎
+‎⭐ Bonus (if possible)
+‎
+‎- Group chat feature
+‎- Voice/video call (WebRTC)
+‎- End-to-end encryption (basic implementation)
+‎
+‎---
+‎
+‎Ensure the project is clean, scalable, and production-ready, not just a demo. Write readable, well-structured code with comments where necessary.
