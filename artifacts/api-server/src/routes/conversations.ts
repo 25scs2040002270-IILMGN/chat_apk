@@ -1,19 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray, desc, count, sql } from "drizzle-orm";
-import {
-  db,
-  usersTable,
-  conversationsTable,
-  conversationParticipantsTable,
-  messagesTable,
-} from "@workspace/db";
+import { User, Conversation, Message, nextId } from "../lib/mongo";
 import { authenticate } from "../middlewares/authenticate";
-import { CreateConversationBody } from "@workspace/api-zod";
 import { getIO, isUserOnline } from "../lib/socket";
 
 const router: IRouter = Router();
 
-function formatUserPublic(user: typeof usersTable.$inferSelect) {
+function formatUserPublic(user: InstanceType<typeof User>) {
   return {
     id: user.id,
     name: user.name,
@@ -24,67 +16,54 @@ function formatUserPublic(user: typeof usersTable.$inferSelect) {
 }
 
 async function getConversationWithMeta(conversationId: number, currentUserId: number) {
-  const [conv] = await db
-    .select()
-    .from(conversationsTable)
-    .where(eq(conversationsTable.id, conversationId));
-
+  const conv = await Conversation.findOne({ id: conversationId });
   if (!conv) return null;
 
-  const participantRows = await db
-    .select()
-    .from(conversationParticipantsTable)
-    .innerJoin(usersTable, eq(conversationParticipantsTable.userId, usersTable.id))
-    .where(eq(conversationParticipantsTable.conversationId, conversationId));
+  // Load all participant users
+  const participantUserIds = conv.participants.map((p) => p.userId);
+  const participantUsers = await User.find({ id: { $in: participantUserIds } });
+  const userMap = new Map(participantUsers.map((u) => [u.id, u]));
 
-  const participants = participantRows.map((r) => formatUserPublic(r.users));
+  const participants = participantUsers.map(formatUserPublic);
 
-  const myParticipant = participantRows.find(
-    (r) => r.conversation_participants.userId === currentUserId
-  );
-  const lastReadMessageId = myParticipant?.conversation_participants.lastReadMessageId ?? null;
+  const myParticipant = conv.participants.find((p) => p.userId === currentUserId);
+  const lastReadMessageId = myParticipant?.lastReadMessageId ?? null;
 
-  const lastMessages = await db
-    .select()
-    .from(messagesTable)
-    .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
-    .where(
-      and(
-        eq(messagesTable.conversationId, conversationId),
-        sql`${messagesTable.deletedAt} IS NULL`
-      )
-    )
-    .orderBy(desc(messagesTable.createdAt))
-    .limit(1);
+  // Last message
+  const lastMessageDoc = await Message.findOne({
+    conversationId,
+    deletedAt: null,
+  }).sort({ createdAt: -1 });
 
-  const lastMessage = lastMessages[0]
-    ? {
-        id: lastMessages[0].messages.id,
-        conversationId: lastMessages[0].messages.conversationId,
-        senderId: lastMessages[0].messages.senderId,
-        content: lastMessages[0].messages.content ?? null,
-        mediaUrl: lastMessages[0].messages.mediaUrl ?? null,
-        mediaType: lastMessages[0].messages.mediaType ?? null,
-        status: lastMessages[0].messages.status,
-        createdAt: lastMessages[0].messages.createdAt.toISOString(),
-        readAt: lastMessages[0].messages.readAt?.toISOString() ?? null,
-        sender: formatUserPublic(lastMessages[0].users),
-      }
-    : null;
+  let lastMessage = null;
+  if (lastMessageDoc) {
+    const sender = userMap.get(lastMessageDoc.senderId);
+    if (sender) {
+      lastMessage = {
+        id: lastMessageDoc.id,
+        conversationId: lastMessageDoc.conversationId,
+        senderId: lastMessageDoc.senderId,
+        content: lastMessageDoc.content ?? null,
+        mediaUrl: lastMessageDoc.mediaUrl ?? null,
+        mediaType: lastMessageDoc.mediaType ?? null,
+        status: lastMessageDoc.status,
+        createdAt: lastMessageDoc.createdAt.toISOString(),
+        readAt: lastMessageDoc.readAt?.toISOString() ?? null,
+        sender: formatUserPublic(sender),
+      };
+    }
+  }
 
-  const [unreadResult] = await db
-    .select({ count: count() })
-    .from(messagesTable)
-    .where(
-      and(
-        eq(messagesTable.conversationId, conversationId),
-        sql`${messagesTable.senderId} != ${currentUserId}`,
-        sql`${messagesTable.deletedAt} IS NULL`,
-        lastReadMessageId
-          ? sql`${messagesTable.id} > ${lastReadMessageId}`
-          : sql`TRUE`
-      )
-    );
+  // Unread count
+  const unreadQuery: Record<string, any> = {
+    conversationId,
+    senderId: { $ne: currentUserId },
+    deletedAt: null,
+  };
+  if (lastReadMessageId) {
+    unreadQuery.id = { $gt: lastReadMessageId };
+  }
+  const unreadCount = await Message.countDocuments(unreadQuery);
 
   return {
     id: conv.id,
@@ -95,27 +74,18 @@ async function getConversationWithMeta(conversationId: number, currentUserId: nu
     updatedAt: conv.updatedAt.toISOString(),
     participants,
     lastMessage,
-    unreadCount: unreadResult?.count ?? 0,
+    unreadCount,
   };
 }
 
 router.get("/conversations", authenticate, async (req, res): Promise<void> => {
-  const myParticipations = await db
-    .select({ conversationId: conversationParticipantsTable.conversationId })
-    .from(conversationParticipantsTable)
-    .where(eq(conversationParticipantsTable.userId, req.userId!));
+  const myConvs = await Conversation.find({ "participants.userId": req.userId! });
 
-  const convIds = myParticipations.map((p) => p.conversationId);
-  if (convIds.length === 0) {
-    res.json([]);
-    return;
-  }
-
-  const convs = await Promise.all(
-    convIds.map((id) => getConversationWithMeta(id, req.userId!))
+  const results = await Promise.all(
+    myConvs.map((c) => getConversationWithMeta(c.id, req.userId!))
   );
 
-  const result = convs
+  const sorted = results
     .filter(Boolean)
     .sort((a, b) => {
       const aTime = a!.lastMessage?.createdAt ?? a!.updatedAt;
@@ -123,71 +93,49 @@ router.get("/conversations", authenticate, async (req, res): Promise<void> => {
       return new Date(bTime).getTime() - new Date(aTime).getTime();
     });
 
-  res.json(result);
+  res.json(sorted);
 });
 
 router.post("/conversations", authenticate, async (req, res): Promise<void> => {
-  const parsed = CreateConversationBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  const { participantIds, name, isGroup } = req.body ?? {};
+
+  if (!Array.isArray(participantIds) || participantIds.length === 0) {
+    res.status(400).json({ error: "participantIds must be a non-empty array" });
     return;
   }
 
-  const { participantIds, name, isGroup } = parsed.data;
-  const allParticipantIds = Array.from(new Set([req.userId!, ...participantIds]));
+  const allParticipantIds: number[] = Array.from(
+    new Set([req.userId!, ...participantIds.map(Number)])
+  );
 
+  // Deduplication for 1:1 chats
   if (!isGroup && allParticipantIds.length === 2) {
     const [otherId] = allParticipantIds.filter((id) => id !== req.userId);
+    const existing = await Conversation.findOne({
+      isGroup: false,
+      "participants.userId": { $all: [req.userId!, otherId] },
+      $expr: { $eq: [{ $size: "$participants" }, 2] },
+    });
 
-    const existingParticipations = await db
-      .select({ conversationId: conversationParticipantsTable.conversationId })
-      .from(conversationParticipantsTable)
-      .where(eq(conversationParticipantsTable.userId, req.userId!));
-
-    const myConvIds = existingParticipations.map((p) => p.conversationId);
-
-    if (myConvIds.length > 0) {
-      const otherParticipations = await db
-        .select({ conversationId: conversationParticipantsTable.conversationId })
-        .from(conversationParticipantsTable)
-        .innerJoin(
-          conversationsTable,
-          eq(conversationParticipantsTable.conversationId, conversationsTable.id)
-        )
-        .where(
-          and(
-            eq(conversationParticipantsTable.userId, otherId),
-            inArray(conversationParticipantsTable.conversationId, myConvIds),
-            eq(conversationsTable.isGroup, false)
-          )
-        );
-
-      if (otherParticipations.length > 0) {
-        const existing = await getConversationWithMeta(
-          otherParticipations[0].conversation_participants.conversationId,
-          req.userId!
-        );
-        res.status(201).json(existing);
-        return;
-      }
+    if (existing) {
+      const meta = await getConversationWithMeta(existing.id, req.userId!);
+      res.status(201).json(meta);
+      return;
     }
   }
 
-  const [conv] = await db
-    .insert(conversationsTable)
-    .values({
-      name: name ?? null,
-      isGroup: isGroup ?? false,
-      createdBy: req.userId!,
-    })
-    .returning();
-
-  await db.insert(conversationParticipantsTable).values(
-    allParticipantIds.map((uid) => ({
-      conversationId: conv.id,
+  const id = await nextId("conversations");
+  const conv = await Conversation.create({
+    id,
+    name: name ?? null,
+    isGroup: isGroup ?? false,
+    createdBy: req.userId!,
+    participants: allParticipantIds.map((uid) => ({
       userId: uid,
-    }))
-  );
+      joinedAt: new Date(),
+      lastReadMessageId: null,
+    })),
+  });
 
   const meta = await getConversationWithMeta(conv.id, req.userId!);
 
@@ -200,20 +148,18 @@ router.post("/conversations", authenticate, async (req, res): Promise<void> => {
 });
 
 router.get("/conversations/:conversationId", authenticate, async (req, res): Promise<void> => {
-  const raw = Array.isArray(req.params.conversationId) ? req.params.conversationId[0] : req.params.conversationId;
-  const conversationId = parseInt(raw, 10);
+  const conversationId = parseInt(req.params.conversationId, 10);
+  if (isNaN(conversationId)) {
+    res.status(400).json({ error: "Invalid conversation ID" });
+    return;
+  }
 
-  const [myParticipation] = await db
-    .select()
-    .from(conversationParticipantsTable)
-    .where(
-      and(
-        eq(conversationParticipantsTable.conversationId, conversationId),
-        eq(conversationParticipantsTable.userId, req.userId!)
-      )
-    );
+  const conv = await Conversation.findOne({
+    id: conversationId,
+    "participants.userId": req.userId!,
+  });
 
-  if (!myParticipation) {
+  if (!conv) {
     res.status(404).json({ error: "Conversation not found" });
     return;
   }

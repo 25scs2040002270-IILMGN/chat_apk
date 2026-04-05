@@ -27,3 +27,8 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+MONGODB_URI = "mongodb+srv://admin:%40Amaan%231@cluster0.atlz7qg.mongodb.net/?appName=Cluster0"

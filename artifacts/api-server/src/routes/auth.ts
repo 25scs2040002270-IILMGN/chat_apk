@@ -1,13 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { User, nextId } from "../lib/mongo";
 import { hashPassword, comparePassword, signToken } from "../lib/auth";
 import { authenticate } from "../middlewares/authenticate";
-import { RegisterBody, LoginBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
-function formatUser(user: typeof usersTable.$inferSelect) {
+function formatUser(user: InstanceType<typeof User>) {
   return {
     id: user.id,
     name: user.name,
@@ -20,37 +18,44 @@ function formatUser(user: typeof usersTable.$inferSelect) {
 }
 
 router.post("/auth/register", async (req, res): Promise<void> => {
-  const parsed = RegisterBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  const { name, email, password } = req.body ?? {};
+
+  if (!name || typeof name !== "string" || name.trim().length < 2) {
+    res.status(400).json({ error: "Name must be at least 2 characters" });
+    return;
+  }
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    res.status(400).json({ error: "Valid email is required" });
+    return;
+  }
+  if (!password || typeof password !== "string" || password.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
     return;
   }
 
-  const { name, email, password } = parsed.data;
-
-  const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
-  if (existing.length > 0) {
+  const existing = await User.findOne({ email: email.toLowerCase().trim() });
+  if (existing) {
     res.status(409).json({ error: "Email already in use" });
     return;
   }
 
+  const id = await nextId("users");
   const passwordHash = await hashPassword(password);
-  const [user] = await db.insert(usersTable).values({ name, email, passwordHash }).returning();
+  const user = await User.create({ id, name: name.trim(), email: email.toLowerCase().trim(), passwordHash });
 
   const token = signToken({ userId: user.id, email: user.email });
   res.status(201).json({ token, user: formatUser(user) });
 });
 
 router.post("/auth/login", async (req, res): Promise<void> => {
-  const parsed = LoginBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  const { email, password } = req.body ?? {};
+
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password are required" });
     return;
   }
 
-  const { email, password } = parsed.data;
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
-
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
   if (!user) {
     res.status(401).json({ error: "Invalid email or password" });
     return;
@@ -78,20 +83,20 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
     return;
   }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
   if (!user) {
     res.status(404).json({ error: "No account found with that email address" });
     return;
   }
 
-  const passwordHash = await hashPassword(newPassword);
-  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, user.id));
+  user.passwordHash = await hashPassword(newPassword);
+  await user.save();
 
   res.json({ message: "Password updated successfully" });
 });
 
 router.get("/auth/me", authenticate, async (req, res): Promise<void> => {
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
+  const user = await User.findOne({ id: req.userId! });
   if (!user) {
     res.status(401).json({ error: "User not found" });
     return;
