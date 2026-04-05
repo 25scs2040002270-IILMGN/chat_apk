@@ -15,11 +15,11 @@ paths = [ "/" ]
 localPort = 18228
 
 [services.development]
-run = "pnpm --filter @workspace/chat-app run dev"
+run = "pnpm --filter @workspace/frontend run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/chat-app", "run", "build" ]
-publicDir = "artifacts/chat-app/dist/public"
+build = [ "pnpm", "--filter", "@workspace/frontend", "run", "build" ]
+publicDir = "frontend/dist"
 serve = "static"
 
 [[services.production.rewrites]]

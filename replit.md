@@ -10,32 +10,43 @@ A production-ready WhatsApp-like real-time chat application with full authentica
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **Frontend**: React + Vite (artifacts/chat-app)
-- **Backend**: Express 5 + Socket.IO (artifacts/api-server)
-- **Database**: PostgreSQL + Drizzle ORM
+- **Frontend**: React + Vite (`frontend/`) — package `@workspace/frontend`
+- **Backend**: Express 5 + Socket.IO (`backend/`) — package `@workspace/backend`
+- **Database**: MongoDB Atlas via Mongoose
 - **Authentication**: JWT + bcrypt
 - **Real-time**: Socket.IO WebSockets
-- **File Uploads**: multer (local storage at /uploads)
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **File Uploads**: multer (local storage at backend/uploads)
+- **Shared API client**: `lib/api-client-react` — TanStack Query hooks used by frontend
 
-## Architecture
+## Project Structure
 
-### Database Schema (lib/db/src/schema/)
-- `users` — user profiles, online status, last seen
-- `conversations` — 1:1 and group chats
-- `conversation_participants` — many-to-many users/conversations, tracks last read message
-- `messages` — messages with status (sent/delivered/read), auto-delete after 8h when read
+```
+├── frontend/          ← React + Vite frontend (deploy to Vercel)
+│   ├── src/
+│   ├── vite.config.ts
+│   └── vercel.json    ← Vercel SPA routing config
+├── backend/           ← Express + MongoDB backend (deploy to Render)
+│   ├── src/
+│   │   ├── routes/   ← auth, users, conversations, messages, media
+│   │   ├── lib/      ← mongo models, socket, auth helpers
+│   │   └── middlewares/
+│   ├── build.mjs     ← esbuild bundler
+│   └── .env.example  ← required env vars
+├── lib/
+│   ├── api-client-react/  ← generated TanStack Query hooks (used by frontend)
+│   ├── api-zod/           ← Zod schemas (generated)
+│   └── db/                ← legacy Drizzle ORM (unused, kept for reference)
+└── artifacts/         ← Replit artifact wrappers (do not edit source here)
+```
 
-### Backend Routes (artifacts/api-server/src/routes/)
-- `auth.ts` — /api/auth/register, /api/auth/login, /api/auth/me
+## Backend Routes (`backend/src/routes/`)
+- `auth.ts` — /api/auth/register, /api/auth/login, /api/auth/reset-password, /api/auth/me
 - `users.ts` — /api/users/search, /api/users/:id, /api/users/:id/profile
 - `conversations.ts` — /api/conversations (CRUD)
 - `messages.ts` — /api/conversations/:id/messages (CRUD + read receipts)
-- `media.ts` — /api/media/upload (multipart form, stored in /uploads)
+- `media.ts` — /api/media/upload (multipart form)
 
-### Socket.IO Events (artifacts/api-server/src/lib/socket.ts)
+## Socket.IO Events (`backend/src/lib/socket.ts`)
 Path: /api/socket.io
 
 Server emits:
@@ -49,7 +60,7 @@ Client emits:
 - `typing:start` / `typing:stop` — with conversationId
 - `conversation:join` / `conversation:leave` — room management
 
-### Frontend Pages (artifacts/chat-app/src/)
+## Frontend Pages (`frontend/src/`)
 - `/login` — JWT login form
 - `/register` — registration form
 - `/` — main chat interface (sidebar + chat window)
@@ -58,10 +69,23 @@ Client emits:
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+- `pnpm --filter @workspace/frontend run dev` — run frontend locally
+- `pnpm --filter @workspace/backend run dev` — run backend locally
+
+## Deployment
+
+### Vercel (Frontend)
+- **Root Directory**: `frontend`
+- **Install Command**: `cd .. && pnpm install`
+- **Build Command**: `pnpm run build`
+- **Output Directory**: `dist`
+- **Environment Variables**: `VITE_API_URL=https://your-render-backend.onrender.com`
+
+### Render (Backend)
+- **Root Directory**: `.` (repo root)
+- **Build Command**: `pnpm install && pnpm --filter @workspace/backend run build`
+- **Start Command**: `node backend/dist/index.mjs`
+- **Environment Variables**: `MONGODB_URI`, `SESSION_SECRET`, `PORT`, `NODE_ENV=production`
 
 ## Security Features
 - bcrypt password hashing (12 rounds)
@@ -72,7 +96,3 @@ Client emits:
 
 ## Message Auto-Delete
 Messages with status "read" are soft-deleted (deletedAt set) after 8 hours via cleanup on each messages fetch.
-
-## Test Users
-- alice@example.com / password123
-- bob@example.com / password123
