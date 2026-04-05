@@ -66,6 +66,30 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   res.json({ token, user: formatUser(user) });
 });
 
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const { email, newPassword } = req.body ?? {};
+
+  if (!email || typeof email !== "string") {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+  if (!newPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+    res.status(400).json({ error: "New password must be at least 6 characters" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
+  if (!user) {
+    res.status(404).json({ error: "No account found with that email address" });
+    return;
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, user.id));
+
+  res.json({ message: "Password updated successfully" });
+});
+
 router.get("/auth/me", authenticate, async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
   if (!user) {

@@ -107,12 +107,19 @@ export default function Login() {
           </form>
         </Form>
 
-        <p className="text-center text-sm text-gray-500">
-          Don't have an account?{" "}
-          <Link href="/register" className="font-medium text-primary hover:text-primary/90 transition-colors">
-            Sign up
-          </Link>
-        </p>
+        <div className="space-y-3 text-center">
+          <p className="text-sm">
+            <Link href="/forgot-password" className="font-medium text-primary hover:text-primary/90 transition-colors">
+              Forgot your password?
+            </Link>
+          </p>
+          <p className="text-sm text-gray-500">
+            Don't have an account?{" "}
+            <Link href="/register" className="font-medium text-primary hover:text-primary/90 transition-colors">
+              Sign up
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

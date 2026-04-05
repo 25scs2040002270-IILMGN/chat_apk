@@ -8,6 +8,7 @@ import Register from "@/pages/register";
 import Home from "@/pages/home";
 import Profile from "@/pages/profile";
 import Settings from "@/pages/settings";
+import ForgotPassword from "@/pages/forgot-password";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SocketProvider } from "@/hooks/use-socket";
 import { ThemeProvider } from "@/hooks/use-theme";
@@ -44,6 +45,7 @@ function Router() {
       <Route path="/" component={() => <ProtectedRoute component={Home} />} />
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+      <Route path="/forgot-password" component={ForgotPassword} />
       <Route component={NotFound} />
     </Switch>
   );
