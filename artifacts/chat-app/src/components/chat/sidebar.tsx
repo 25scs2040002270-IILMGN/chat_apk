@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquarePlus, Search, MoreVertical, Settings } from "lucide-react";
+import { MessageSquarePlus, Search, Settings } from "lucide-react";
 import { formatDistanceToNow, isToday, format } from "date-fns";
 import { SearchModal } from "./search-modal";
 
@@ -84,13 +84,15 @@ export function Sidebar({ activeConversationId, onSelectConversation }: SidebarP
             <AvatarFallback className="bg-primary/20 text-primary">{user?.name?.substring(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
         </Link>
-        <div className="flex items-center space-x-2 text-gray-500">
+        <div className="flex items-center space-x-1 text-gray-500">
           <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setIsSearchModalOpen(true)}>
             <MessageSquarePlus className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <MoreVertical className="h-5 w-5" />
-          </Button>
+          <Link href="/settings">
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <Settings className="h-5 w-5" />
+            </Button>
+          </Link>
         </div>
       </div>
 

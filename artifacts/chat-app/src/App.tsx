@@ -7,8 +7,10 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Home from "@/pages/home";
 import Profile from "@/pages/profile";
+import Settings from "@/pages/settings";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SocketProvider } from "@/hooks/use-socket";
+import { ThemeProvider } from "@/hooks/use-theme";
 import "@/lib/api-init";
 
 const queryClient = new QueryClient({
@@ -22,11 +24,11 @@ const queryClient = new QueryClient({
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const { user, isLoading } = useAuth();
-  
+
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div>;
   }
-  
+
   if (!user) {
     return <Redirect to="/login" />;
   }
@@ -41,6 +43,7 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/" component={() => <ProtectedRoute component={Home} />} />
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
+      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -50,14 +53,16 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AuthProvider>
-            <SocketProvider>
-              <Router />
-            </SocketProvider>
-          </AuthProvider>
-        </WouterRouter>
-        <Toaster />
+        <ThemeProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AuthProvider>
+              <SocketProvider>
+                <Router />
+              </SocketProvider>
+            </AuthProvider>
+          </WouterRouter>
+          <Toaster />
+        </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
